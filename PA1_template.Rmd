@@ -1,25 +1,112 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
+author: Patricia J. Hawkins
 output: 
   html_document:
-    keep_md: true
+  keep_md: true
 ---
+```{r global_options, include=FALSE}
+library(knitr)
+#opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/', warning=FALSE, message=FALSE) # don't include warnings and errors in output document
+opts_chunk$set(fig.width=10, fig.height=8)
+par(bg = "white")
+```
 
+Current timestamp: `r date()` 
 
 ## Loading and preprocessing the data
 
+```{r read_file}
+library(data.table)
+library(lubridate)
 
+activities <- as.data.table(read.csv("./activity.csv"))
+activities$date <- ymd(activities$date)
+```
 
 ## What is mean total number of steps taken per day?
+```{r mean}
+library(plyr)
+stats <- ddply(activities, ~date,summarise,total_steps_per_day = sum(steps,na.rm=TRUE),
+               mean=mean(steps, na.rm = TRUE),
+               median=median(steps, na.rm = TRUE))
+```
+###  1. Make a histogram of the total number of steps taken each day
+```{r hist}
+hist(stats$total_steps_per_day, breaks = 15, bg="white")
+```
+### 2. Calculate and report the mean and median total number of steps taken per day
 
+#### Mean number of steps taken per day: `r mean(stats$total)`
 
+#### Median number of steps taken per day: `r median(stats$total)`
 
 ## What is the average daily activity pattern?
 
+### 1. Make a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, across all days (y-axis)
+```{r plot average steps per day}
+average_daily <- as.data.table(aggregate(steps ~ interval, activities, "mean"))
+plot(average_daily, type = "l", bg="white")
 
+```
+### 2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+#### Interval `r average_daily[steps == max(average_daily$steps)]$interval` contains `r max(average_daily$steps)` steps on average
 
 ## Imputing missing values
 
+### 1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+####  Number of rows with missing values: `r sum(!complete.cases(activities))`
+### 2. For missing values, use the mean value for that interval, which we calculated for the average daily activity pattern.
+### 3. Create new dataset new_activities; fill in missing step values.
 
+``` {r fill_missing_values}
+setkey(average_daily, interval)
+
+new_activities <- activities
+setkey(new_activities, date, interval)
+cases <- new_activities[!complete.cases(activities)]
+
+for (i in 1:nrow(cases)) {              # Should be possible to vectorize for-loop,  since none of the results depend on each other, but this works.
+    row <- cases[i]
+    steps <- as.integer(average_daily[.(row$interval)]$steps + .5) # round to nearest integer
+    new_activities[.(row$date, row$interval)]$steps <-  steps
+ }
+```
+### 4. Make a histogram of the total number of steps taken each day
+
+``` {r hist_total_daily_steps }
+total_daily <- as.data.table(aggregate(steps ~ date, new_activities, "sum"))
+hist(total_daily$steps, breaks = 15)
+```
+#### 4a. Calculate and report the mean and median total number of steps taken per day.
+#### Mean total steps per day:  `r mean(total_daily$steps)`
+#### Median total steps per day: `r median(total_daily$steps)`
 
 ## Are there differences in activity patterns between weekdays and weekends?
+### 1. Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+``` {r day of week factor}
+
+new_activities$day_of_week <- factor(as.integer(wday(new_activities$date) %in% list(1,7)),
+                                     levels = c(0,1), labels=c("weekday", "weekend"))
+```
+### Make a panel plot containing a time series plot (i.e. type = "l") of
+### * the 5-minute interval (x-axis)
+### * and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+
+```{r panel plot}
+
+library(ggplot2)
+qplot(interval, steps, data = aggregate(steps ~ interval + day_of_week, new_activities, "mean"), facets = ~day_of_week) + geom_line()
+
+```
+
+
+
+
+
+
+
+
+
+
